@@ -1,0 +1,129 @@
+seed: 0
+output_dir: checkpoints
+
+data:
+  batch_size: 32
+  num_workers: 12
+  prefetch_factor: 2
+  pin_memory: true
+  persistent_workers: true
+  n_frames: 16
+  image_size: 224
+  muscle_dim: 32
+  train:
+    clip_dir: data/processed/train/clips
+    muscle_dir: data/processed/train/muscles
+    metadata_path: data/processed/train/metadata.json
+    frame_cache_dir: data/processed/train/frames
+    replacement_sampling: false
+    virtual_size: null
+    threat_correlation_fraction: 0.0
+    threat_signature_strength: 0.0
+    threat_startle_width: 0.08
+    threat_withdrawal_bias: 0.75
+    threat_autonomic_ramp: 0.25
+    threat_seed: 0
+  val:
+    clip_dir: data/processed/val/clips
+    muscle_dir: data/processed/val/muscles
+    metadata_path: data/processed/val/metadata.json
+    frame_cache_dir: data/processed/val/frames
+  test:
+    clip_dir: data/processed/test/clips
+    muscle_dir: data/processed/test/muscles
+    metadata_path: data/processed/test/metadata.json
+    frame_cache_dir: data/processed/test/frames
+
+model:
+  video_model_name: MCG-NJU/videomae-base
+  video_trainable_strategy: frozen
+  video_trainable_layers: 0
+  video_unfreeze_embeddings: false
+  fusion_mode: cross_attn
+  use_video: true
+  use_muscle: true
+  label_conditioning: false
+  label_vocab_size: 1024
+  muscle_hidden_dim: 128
+  prediction_dim: 32
+  scramble_video: false
+  fusion_dropout: 0.1
+  pred_dropout: 0.1
+  predictive_distribution: point
+  video_latent_prediction: false
+  fast_memory:
+    enabled: false
+    type: gru_slots
+    num_slots: 8
+    slot_dim: 128
+    dropout: 0.1
+    learned_decay: true
+    decay_init: 0.90
+  pbit:
+    enabled: false
+    mode: stochastic_straight_through
+    num_bits: 256
+    temperature: 0.67
+    target_entropy: 0.4
+  slow_adapter:
+    enabled: false
+    rank: 4
+    target_modules: [fusion, predictor, video_latent_head]
+    quantization_levels: null
+    quantization_mode: none
+
+training:
+  max_epochs: 100
+  max_steps: null
+  early_stopping_patience: null
+  learning_rate: 3.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 5
+  warmup_steps: null
+  warmup_steps_cap: null
+  min_lr_scale: 0.0333333333
+  grad_clip_norm: 1.0
+  precision: 16-mixed
+  compile: true
+  compile_mode: default
+  accumulate_grad_batches: 4
+  mask_ratio: 0.5
+  loss_name: current
+  loss_mode: mse
+  loss_weights:
+    pred: 1.0
+    temp: 0.1
+    var: 0.04
+    cov: 0.04
+
+trainer:
+  accelerator: auto
+  devices: auto
+  log_every_n_steps: 10
+  num_sanity_val_steps: 0
+
+logging:
+  use_wandb: false
+  project: egomuscle
+  run_name: baseline
+  save_dir: lightning_logs
+  entity: null
+  group: null
+  job_type: train
+  tags: []
+  notes: null
+  wandb_mode: online
+  wandb_log_model: false
+  wandb_run_id: null
+  wandb_resume: null
+
+evaluation:
+  neural_rdms_dir: egomuscle/eval/neural_rdms
+  rsa_monitor_subset: 92
+  memory_probe:
+    gaps: [0, 2, 4, 8, 12]
+    nback: [1, 2, 4]
+    stochastic_samples: 8
+  agency_probe:
+    enabled: false
+    mismatch_fraction: 0.5
