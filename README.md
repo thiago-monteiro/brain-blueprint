@@ -11,6 +11,7 @@ Use **`egomuscle/training/config.yaml`** for training defaults and paths.
 | `egomuscle/` | Package: data pipelines, `EgoMuscle` model, training (PyTorch Lightning), eval (RSA, RDM, probes) |
 | `experiments/` | Shell/Python drivers for ablations, RDM comparison, RSA benchmarks, dataset checks |
 | `scripts/downloaders/download_videomae_weights.py` | Optional helper to materialize VideoMAE-Base weights under `models/videomae-base/` |
+|`metadata.json` | Twente splits for reproducibility. |
 
 
 Processed datasets, checkpoints, wandb runs, and most of `experiments/results/` are **gitignored**; see `.gitignore`.
