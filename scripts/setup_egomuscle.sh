@@ -28,8 +28,8 @@ export PYTHONPATH="${PYTHONPATH:+${PYTHONPATH}:}${ROOT}"
 echo ""
 echo "=== Local setup finished (venv + PYTHONPATH helper) ==="
 echo "  source .venv/bin/activate && source scripts/activate_egomuscle.sh"
-echo "  Download public assets: bash scripts/download_egomuscle_data.sh"
-echo "  Manual/licenced data: ${ROOT}/scripts/DATA_PREREQS.md"
+echo "  Download public assets: bash scripts/downloaders/download_egomuscle_data.sh"
+echo "  Manual/licensed data: see README.md"
 echo ""
 
 have_amass() {

@@ -1,59 +1,67 @@
-import os
-import sys
-import subprocess
+from __future__ import annotations
 
-def main():
-    recenter_root = sys.argv[1] if len(sys.argv) > 1 else "data/processed_body"
-    exo_root = sys.argv[2] if len(sys.argv) > 2 else "data/processed_exo_real"
-    extra_args = sys.argv[3:] if len(sys.argv) > 2 else sys.argv[1:] if len(sys.argv) > 1 else []
-    
-    raw_cache = os.environ.get("RAW_CACHE", "data/raw/babel_renders")
-    body_cache = os.environ.get("BODY_CACHE", "data/raw/babel_recentered")
-    reframe_device = os.environ.get("REFRAME_DEVICE", "cuda")
-    reframe_size = os.environ.get("REFRAME_SIZE", "512")
-    reframe_workers = os.environ.get("REFRAME_WORKERS", "4")
-    reframe_detect_every = os.environ.get("REFRAME_DETECT_EVERY", "6")
-    reframe_crop_scale = os.environ.get("REFRAME_CROP_SCALE", "1.8")
-    reframe_min_score = os.environ.get("REFRAME_MIN_SCORE", "0.65")
-    workers = os.environ.get("WORKERS", "16")
-    skip_quality_filter = os.environ.get("SKIP_QUALITY_FILTER", "0")
-    
-    print("Building BABEL view pair")
-    print(f"  recenter_root: {recenter_root}")
-    print(f"  exo_root: {exo_root}")
-    print(f"  raw_cache: {raw_cache}")
-    print(f"  body_cache: {body_cache}")
-    print(f"  reframe_device: {reframe_device}")
-    print(f"  reframe_size: {reframe_size}")
-    print(f"  reframe_workers: {reframe_workers}")
-    print(f"  detect_every: {reframe_detect_every}")
-    print(f"  crop_scale: {reframe_crop_scale}")
-    print(f"  min_score: {reframe_min_score}")
-    print(f"  workers: {workers}")
-    print(f"  skip_quality_filter: {skip_quality_filter}")
-    print("  note: babel_recenter is a detector-based body-centered crop, not the AMASS peripersonal renderer used for E3.")
-    
-    cmd = [
-        "python", "-m", "egomuscle.data.build_min_t_dataset",
-        "--video-source", "babel_recenter",
-        "--output-root", recenter_root,
-        "--paired-output-root", exo_root,
-        "--video-cache", body_cache,
-        "--paired-video-cache", raw_cache,
-        "--render-device", reframe_device,
-        "--render-size", reframe_size,
-        "--render-workers", reframe_workers,
-        "--recenter-detect-every", reframe_detect_every,
-        "--recenter-crop-scale", reframe_crop_scale,
-        "--recenter-min-score", reframe_min_score,
-        "--workers", workers
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Build paired BABEL recentered and raw-video views.")
+    parser.add_argument("recenter_root", nargs="?", type=Path, default=Path("data/processed_body"))
+    parser.add_argument("exo_root", nargs="?", type=Path, default=Path("data/processed_exo_real"))
+    parser.add_argument("--raw-cache", type=Path, default=Path("data/raw/babel_renders"))
+    parser.add_argument("--body-cache", type=Path, default=Path("data/raw/babel_recentered"))
+    parser.add_argument("--render-device", default="cuda")
+    parser.add_argument("--render-size", type=int, default=512)
+    parser.add_argument("--render-workers", type=int, default=4)
+    parser.add_argument("--recenter-detect-every", type=int, default=6)
+    parser.add_argument("--recenter-crop-scale", type=float, default=1.8)
+    parser.add_argument("--recenter-min-score", type=float, default=0.65)
+    parser.add_argument("--workers", type=int, default=16)
+    parser.add_argument("--skip-quality-filter", action="store_true")
+    args, extra_args = parser.parse_known_args()
+    args.extra_args = extra_args
+    return args
+
+
+def main() -> None:
+    args = parse_args()
+    command = [
+        sys.executable,
+        "-m",
+        "egomuscle.data.build_min_t_dataset",
+        "--video-source",
+        "babel_recenter",
+        "--output-root",
+        str(args.recenter_root),
+        "--paired-output-root",
+        str(args.exo_root),
+        "--video-cache",
+        str(args.body_cache),
+        "--paired-video-cache",
+        str(args.raw_cache),
+        "--render-device",
+        args.render_device,
+        "--render-size",
+        str(args.render_size),
+        "--render-workers",
+        str(args.render_workers),
+        "--recenter-detect-every",
+        str(args.recenter_detect_every),
+        "--recenter-crop-scale",
+        str(args.recenter_crop_scale),
+        "--recenter-min-score",
+        str(args.recenter_min_score),
+        "--workers",
+        str(args.workers),
     ]
-    
-    if skip_quality_filter != "0":
-        cmd.append("--skip-quality-filter")
-        
-    cmd.extend(extra_args)
-    subprocess.run(cmd, check=True)
+    if args.skip_quality_filter:
+        command.append("--skip-quality-filter")
+    command.extend(args.extra_args)
+    print(" ".join(command), flush=True)
+    subprocess.run(command, check=True)
+
 
 if __name__ == "__main__":
     main()

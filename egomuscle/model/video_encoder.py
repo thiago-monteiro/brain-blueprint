@@ -25,12 +25,10 @@ class VideoAdapter(nn.Module):
 
 
 def _get_hidden_dim_from_config(cfg) -> int:
-    # Different remote model configs may expose different attribute names.
     for key in ("hidden_size", "embed_dim", "hidden_dim", "d_model"):
         val = getattr(cfg, key, None)
         if val is not None:
             return int(val)
-        # Some remote configs nest parameters under `model_config`.
         model_conf = getattr(cfg, "model_config", None)
         if isinstance(model_conf, dict) and key in model_conf:
             return int(model_conf[key])
@@ -42,13 +40,11 @@ def _resolve_image_size(image_size: int | tuple[int, int]) -> int:
 
 
 def _resolve_transformer_blocks(encoder: nn.Module) -> nn.ModuleList | None:
-    # VideoMAE v1 (transformers VideoMAEModel): encoder.encoder.layer
     inner = getattr(encoder, "encoder", None)
     if inner is not None:
         blocks = getattr(inner, "layer", None)
         if blocks is not None:
             return blocks
-    # VideoMAEv2 (OpenGVLab hub): encoder.model.blocks
     vision = getattr(encoder, "model", None)
     if vision is not None:
         blocks = getattr(vision, "blocks", None)
@@ -63,7 +59,6 @@ def _is_videomaev2(encoder: nn.Module) -> bool:
 
 
 def _frames_to_v2_pixel_values(frames: torch.Tensor) -> torch.Tensor:
-    # Dataset / training use (B, T, C, H, W); VideoMAEv2 expects (B, C, T, H, W).
     if frames.ndim != 5:
         raise ValueError(f"Expected 5D frame tensor, got shape {tuple(frames.shape)}")
     return frames.permute(0, 2, 1, 3, 4).contiguous()
@@ -177,10 +172,7 @@ class FrozenVideoEncoder(nn.Module):
         unfreeze_embeddings: bool = False,
     ) -> None:
         super().__init__()
-        # Load model class/code from the hub and require it to succeed.
-        # If this fails, let the exception propagate so the caller can handle it.
         self.encoder = AutoModel.from_pretrained(model_name, trust_remote_code=True)
-        # Resolve hidden dimension from the model config (handles v1/v2 config differences).
         hidden_dim = _get_hidden_dim_from_config(self.encoder.config)
         self.adapter = VideoAdapter(hidden_dim=hidden_dim)
         self.hidden_dim = hidden_dim

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import csv
 import glob
 import json
 import math
@@ -89,8 +91,6 @@ def parse_args() -> argparse.Namespace:
 
 class StaticImageThreatDataset(Dataset):
     def __init__(self, manifest_path: Path, *, n_frames: int, image_size: int) -> None:
-        import csv
-
         self.rows = []
         with manifest_path.open(newline="") as handle:
             for row in csv.DictReader(handle):
@@ -209,7 +209,7 @@ def load_module(checkpoint: Path, config_path: Path, overrides: list[str], devic
     if not isinstance(config, dict):
         config = load_config(config_path)
     else:
-        config = json.loads(json.dumps(config))
+        config = copy.deepcopy(config)
     for override in overrides:
         apply_override(config, override)
     module = EgoMuscleLightningModule(config)

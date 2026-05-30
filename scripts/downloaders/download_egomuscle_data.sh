@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 DO_VIDEOMAE=1
@@ -17,7 +17,17 @@ for arg in "$@"; do
     --skip-mint) DO_MINT=0 ;;
     --skip-twente) DO_TWENTE=0 ;;
     -h|--help)
-      grep '^#' "$0" | head -n 20
+      cat <<'EOF'
+Usage: bash scripts/downloaders/download_egomuscle_data.sh [options]
+
+Options:
+  --videomae-only   Download VideoMAE weights only.
+  --mint-only       Download MinT only.
+  --twente-only     Download Twente EMG/RGB only.
+  --skip-videomae   Skip VideoMAE weights.
+  --skip-mint       Skip MinT.
+  --skip-twente     Skip Twente.
+EOF
       exit 0
       ;;
     *)
@@ -28,13 +38,13 @@ for arg in "$@"; do
 done
 
 if [[ "${DO_VIDEOMAE}" == "1" ]]; then
-  python "${ROOT}/downloaders/download_videomae_weights.py"
+  python "${ROOT}/scripts/downloaders/download_videomae_weights.py"
 fi
 if [[ "${DO_MINT}" == "1" ]]; then
-  python "${ROOT}/downloaders/fetch_mint_dataset.py"
+  python "${ROOT}/scripts/downloaders/fetch_mint_dataset.py"
 fi
 if [[ "${DO_TWENTE}" == "1" ]]; then
-  bash "${ROOT}/downloaders/download_twente.sh"
+  bash "${ROOT}/scripts/downloaders/download_twente.sh"
 fi
 
 echo "download_egomuscle_data.sh finished."

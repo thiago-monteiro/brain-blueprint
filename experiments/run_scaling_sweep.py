@@ -134,7 +134,6 @@ def ladder_suffix_for(mult: float) -> str:
 
 
 MATRIX_PRESETS: dict[str, dict[str, str]] = {
-    # Paper-primary: full 3x3 backbone/hidden matrix with two seeds (18 runs).
     "primary": {
         "SCALING_PROTOCOL_NAME": "paper_scaling_full_matrix_2seed_v1",
         "SCALING_COMPUTE_MODE": "token_parity",
@@ -153,7 +152,6 @@ MATRIX_PRESETS: dict[str, dict[str, str]] = {
         "SCALING_PROGRESS_EVERY_N_BATCHES": "100",
         "EVAL_TWENTE": "0",
     },
-    # Fastest sanity path: base+large, two seeds, no Twente (~4 runs).
     "minimal": {
         "SCALING_PROTOCOL_NAME": "paper_scaling_token_parity_flop_reported_v1",
         "SCALING_COMPUTE_MODE": "token_parity",
@@ -172,7 +170,6 @@ MATRIX_PRESETS: dict[str, dict[str, str]] = {
         "SCALING_EARLY_STOPPING_PATIENCE": "null",
         "EVAL_TWENTE": "0",
     },
-    # Full hidden sweep (27 runs) — only when you explicitly opt in.
     "full": {
         "SCALING_PROTOCOL_NAME": "paper_scaling_token_parity_flop_reported_v1",
         "SCALING_COMPUTE_MODE": "token_parity",

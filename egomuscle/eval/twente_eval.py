@@ -78,9 +78,6 @@ def load_lightning_module(checkpoint_path: Path, config_path: Path, overrides: l
         if hidden_dim in v1_by_hidden:
             model_cfg["video_model_name"] = v1_by_hidden[hidden_dim]
 
-    # Eval should not require re-creating torch.compile wrappers. Checkpoints
-    # saved from compiled training contain ``._orig_mod`` segments in state keys;
-    # those are normalized below before strict loading into an uncompiled module.
     config.setdefault("training", {})["compile"] = False
     module = EgoMuscleLightningModule(config)
 

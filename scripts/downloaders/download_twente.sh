@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 TWENTE_DL_DIR="${TWENTE_DL_DIR:-${ROOT}/data/raw/twente_zenodo_dl}"
@@ -37,20 +37,8 @@ download_file() {
     return
   fi
   echo "Downloading -> ${out}"
-  if command -v aria2c >/dev/null 2>&1; then
-    aria2c \
-      -x 16 -s 16 -k 1M \
-      --file-allocation=none \
-      --retry-wait=5 --max-tries=0 \
-      --continue=true \
-      -d "$(dirname "${out}")" \
-      -o "$(basename "${out}")" \
-      "${url}"
-  else
-    echo "aria2c not found, falling back to curl" >&2
-    curl -fL --retry 3 --retry-delay 5 -C - -o "${out}.part" "${url}"
-    mv -f "${out}.part" "${out}"
-  fi
+  curl -fL --retry 3 --retry-delay 5 -C - -o "${out}.part" "${url}"
+  mv -f "${out}.part" "${out}"
 }
 
 declare -A PIDS=()

@@ -296,7 +296,6 @@ class EgoMuscleLightningModule(pl.LightningModule):
             slow_adapter=model_cfg.get("slow_adapter"),
         )
         self.training_cfg = config["training"]
-        # (1, 3, 1, 1) broadcasts to (B, T, C, H, W). Non-persistent for checkpoint compat.
         self.register_buffer("_image_mean", IMAGE_MEAN.clone(), persistent=False)
         self.register_buffer("_image_std", IMAGE_STD.clone(), persistent=False)
         if self.training_cfg.get("compile", True):
@@ -308,8 +307,6 @@ class EgoMuscleLightningModule(pl.LightningModule):
     def _compile_training_model(self, model: EgoMuscleModel) -> EgoMuscleModel:
         compile_mode = str(self.training_cfg.get("compile_mode", "default"))
         if compile_mode == "reduce-overhead":
-            # reduce-overhead captures CUDA graphs; Lightning's train/backward loop reuses
-            # tensors across steps and triggers "CUDAGraphs overwritten" errors.
             print(
                 "compile_mode=reduce-overhead is not compatible with Lightning training; "
                 "using compile_mode=default instead.",

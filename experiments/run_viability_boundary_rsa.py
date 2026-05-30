@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import json
 import math
@@ -70,45 +71,6 @@ NEUTRAL_KEYWORDS = {
     "pacing",
 }
 
-
-LITERATURE_ROWS = [
-    {
-        "paper": "de Gelder et al. 2007 NeuroImage",
-        "roi": "STS; premotor cortex",
-        "contrast": "dynamic fearful body expressions > dynamic neutral body actions",
-        "statistic_type": "directional_only",
-        "statistic_value": "",
-        "direction": "positive",
-        "notes": "Reported larger dynamic-vs-static expression effects for fearful than neutral body actions in STS and premotor cortex.",
-    },
-    {
-        "paper": "de Gelder et al. 2004 PNAS",
-        "roi": "fusiform gyrus; amygdala; action/motor regions",
-        "contrast": "fearful body expressions > neutral body actions",
-        "statistic_type": "directional_only",
-        "statistic_value": "",
-        "direction": "positive",
-        "notes": "Reported stronger activity for fearful than neutral whole-body expressions across emotion, visual, and action-representation regions.",
-    },
-    {
-        "paper": "Pichon, de Gelder & Grezes 2009 NeuroImage",
-        "roi": "right temporoparietal junction; premotor cortex; vmPFC; anterior temporal lobe",
-        "contrast": "fear/anger dynamic body expressions vs neutral behaviors",
-        "statistic_type": "directional_only",
-        "statistic_value": "",
-        "direction": "positive",
-        "notes": "Reported threat-body condition-specific responses relative to neutral dynamic behaviors.",
-    },
-    {
-        "paper": "Ren et al. 2022 Brain Sciences",
-        "roi": "EBA",
-        "contrast": "anger/fear body expressions > neutral body expressions",
-        "statistic_type": "directional_only",
-        "statistic_value": "",
-        "direction": "positive",
-        "notes": "Reported greater EBA activation to anger and fear than neutral body-expression conditions and RSA evidence for expression-pattern structure.",
-    },
-]
 
 E2_OVERRIDES = [
     "model.video_model_name=MCG-NJU/videomae-base",
@@ -343,12 +305,12 @@ def resolve_checkpoints(args: argparse.Namespace) -> list[Path]:
     return checkpoints
 
 
-def infer_seed(path: Path, fallback: int) -> int:
+def infer_seed(path: Path, default_seed: int) -> int:
     for part in path.parts:
         match = re.fullmatch(r"seed_(\d+)", part)
         if match:
             return int(match.group(1))
-    return fallback
+    return default_seed
 
 
 def load_e2_module(checkpoint_path: Path, config_path: Path, overrides: list[str], device: torch.device) -> EgoMuscleLightningModule:
@@ -357,7 +319,7 @@ def load_e2_module(checkpoint_path: Path, config_path: Path, overrides: list[str
     if not isinstance(config, dict):
         config = load_config(config_path)
     else:
-        config = json.loads(json.dumps(config))
+        config = copy.deepcopy(config)
     for override in overrides:
         apply_override(config, override)
     config.setdefault("training", {})["compile"] = config.get("training", {}).get("compile", True)
@@ -503,27 +465,6 @@ def bootstrap_ci(values: list[float], *, n_bootstrap: int, seed: int) -> list[fl
     return [float(np.quantile(samples, 0.025)), float(np.quantile(samples, 0.975))]
 
 
-def write_human_literature_csv(output_path: Path) -> dict[str, Any]:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fields = ["paper", "roi", "contrast", "statistic_type", "statistic_value", "direction", "notes"]
-    with output_path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
-        writer.writeheader()
-        writer.writerows(LITERATURE_ROWS)
-    numeric = [
-        float(row["statistic_value"])
-        for row in LITERATURE_ROWS
-        if row["statistic_type"] != "directional_only" and str(row["statistic_value"]).strip()
-    ]
-    return {
-        "human_boundary_effect_mean": float(np.mean(numeric)) if numeric else None,
-        "human_boundary_effect_ci": bootstrap_ci(numeric, n_bootstrap=2000, seed=0) if numeric else [None, None],
-        "human_boundary_effect_sd": float(np.std(numeric, ddof=1)) if len(numeric) > 1 else None,
-        "human_numeric_rows": len(numeric),
-        "human_directional_rows": len(LITERATURE_ROWS) - len(numeric),
-    }
-
-
 def write_distances_csv(rows: list[dict[str, Any]], output_path: Path) -> None:
     fields = [
         "seed",
@@ -565,8 +506,6 @@ def main() -> None:
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     device = torch.device(args.device)
-    human_summary = write_human_literature_csv(args.output_dir / "human_literature_effects.csv")
-
     dataset, partition_rows, selected_indices = build_partition(args)
     write_partition_manifest(partition_rows, args.output_dir / "partition_manifest.csv")
 
@@ -584,8 +523,8 @@ def main() -> None:
     checkpoints = resolve_checkpoints(args)
     seed_results: list[dict[str, Any]] = []
 
-    for fallback_seed, checkpoint in enumerate(checkpoints):
-        seed = infer_seed(checkpoint, fallback_seed)
+    for default_seed, checkpoint in enumerate(checkpoints):
+        seed = infer_seed(checkpoint, default_seed)
         module = load_e2_module(checkpoint, args.config, [*E2_OVERRIDES, *args.override], device)
         features, classes, clip_ids = collect_representations(module, dataloader, device, class_by_clip_id)
         rdm = compute_rdm(features)
@@ -619,12 +558,6 @@ def main() -> None:
     model_ci = bootstrap_ci(effects, n_bootstrap=args.n_bootstrap, seed=args.seed)
     permutation_p_values = [float(row["permutation_p_greater"]) for row in seed_results]
     permutation_z_values = [float(row["permutation_z"]) for row in seed_results if math.isfinite(float(row["permutation_z"]))]
-    human_mean = human_summary["human_boundary_effect_mean"]
-    human_sd = human_summary["human_boundary_effect_sd"]
-    model_vs_human_z = None
-    if human_mean is not None and human_sd is not None and human_sd > 0:
-        model_vs_human_z = float((model_mean - human_mean) / human_sd)
-
     selected_by_class = defaultdict(int)
     for row in partition_rows:
         if row["selected"]:
@@ -646,14 +579,6 @@ def main() -> None:
             "max_p_greater": float(np.max(permutation_p_values)) if permutation_p_values else None,
             "mean_z": float(np.mean(permutation_z_values)) if permutation_z_values else None,
         },
-        "human_boundary_effect_mean": human_mean,
-        "human_boundary_effect_ci": human_summary["human_boundary_effect_ci"],
-        "model_vs_human_z": model_vs_human_z,
-        "human_literature_summary": human_summary,
-        "interpretation": (
-            "E2 shows flatter geometry across the viability boundary than human neural data, "
-            "consistent with the absence of a viability envelope."
-        ),
     }
     (args.output_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))

@@ -4,9 +4,10 @@ import subprocess
 import argparse
 import random
 from datetime import datetime
+from pathlib import Path
 
 def main():
-    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    root = Path(__file__).resolve().parents[1]
     os.chdir(root)
 
     parser = argparse.ArgumentParser()
@@ -70,7 +71,7 @@ def main():
     if args.random_seeds:
         seeds_str = " ".join(str(random.randint(0, 2**31 - 1)) for _ in range(30))
         env["SCALING_SEEDS"] = seeds_str
-    subprocess.run(["python", "experiments/run_scaling_law.py"], env=env, check=True)
+    subprocess.run(["python", "experiments/run_scaling_sweep.py"], env=env, check=True)
 
     print("\n==================================================================")
     print(" 2/2 Ablations")

@@ -110,7 +110,6 @@ def permutation_test_rdm(
             int(s.generate_state(1, dtype=np.uint64)[0])
             for s in np.random.SeedSequence(seed).spawn(n_permutations)
         ]
-        # Threading when an outer loky pool is already running; otherwise loky for large vectors.
         if use_thread_pool:
             backend = "threading"
         else:
