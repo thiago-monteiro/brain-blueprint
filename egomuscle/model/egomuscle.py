@@ -5,6 +5,7 @@ from typing import Any
 
 import torch
 from torch import nn
+import torch.utils.checkpoint as cp
 
 from .adapters import AdapterLinear
 from .fusion import CrossAttentionFusion, LateFusionBlock
@@ -63,6 +64,8 @@ class EgoMuscleModel(nn.Module):
         fast_memory: dict[str, Any] | None = None,
         pbit: dict[str, Any] | None = None,
         slow_adapter: dict[str, Any] | None = None,
+        need_weights: bool = True,
+        gradient_checkpointing: bool = False,
     ) -> None:
         super().__init__()
         if not use_video and not use_muscle and not label_conditioning:
@@ -76,6 +79,7 @@ class EgoMuscleModel(nn.Module):
         self.prediction_dim = prediction_dim
         self.predictive_distribution = predictive_distribution
         self.video_latent_prediction = bool(video_latent_prediction)
+        self._need_weights = need_weights
 
         self.video_encoder = (
             FrozenVideoEncoder(
@@ -89,16 +93,17 @@ class EgoMuscleModel(nn.Module):
         )
         vision_dim = self.video_encoder.hidden_dim if self.video_encoder is not None else muscle_hidden_dim
 
-        self.muscle_encoder = MuscleEncoder(input_dim=muscle_dim, hidden_dim=muscle_hidden_dim) if use_muscle else None
+        self.muscle_encoder = MuscleEncoder(input_dim=muscle_dim, hidden_dim=muscle_hidden_dim, gradient_checkpointing=gradient_checkpointing) if use_muscle else None
         self.label_embedding = nn.Embedding(label_vocab_size, muscle_hidden_dim) if label_conditioning else None
 
         self.fusion: CrossAttentionFusion | None = None
         self.late_fusion: LateFusionBlock | None = None
         self.sequence_proj: nn.Module | None = None
+        self._gradient_checkpointing = gradient_checkpointing
 
         if use_video and (use_muscle or label_conditioning):
             if fusion_mode == "cross_attn":
-                self.fusion = CrossAttentionFusion(vision_dim=vision_dim, muscle_dim=muscle_hidden_dim, dropout=fusion_dropout)
+                self.fusion = CrossAttentionFusion(vision_dim=vision_dim, muscle_dim=muscle_hidden_dim, dropout=fusion_dropout, need_weights=need_weights)
                 predictor_dim = vision_dim
             elif fusion_mode == "late":
                 self.late_fusion = LateFusionBlock(vision_dim=vision_dim, muscle_dim=muscle_hidden_dim)
@@ -215,19 +220,22 @@ class EgoMuscleModel(nn.Module):
 
     def forward(
         self,
-        frames: torch.Tensor | None,
-        muscle: torch.Tensor | None,
+        frames: torch.Tensor | None = None,
+        muscle: torch.Tensor | None = None,
         activity_ids: torch.Tensor | None = None,
         mask_ratio: float = 0.5,
         return_layerwise_video: bool = False,
+        video_features: torch.Tensor | None = None,
     ) -> EgoMuscleOutput:
         seq_len = 0
         if frames is not None:
             seq_len = frames.shape[1]
         elif muscle is not None:
             seq_len = muscle.shape[1]
+        elif video_features is not None:
+            seq_len = video_features.shape[1]
         else:
-            raise ValueError("Either frames or muscle inputs are required.")
+            raise ValueError("Either frames, video_features, or muscle inputs are required.")
 
         if self.scramble_video and frames is not None:
             permutation = torch.randperm(frames.shape[1], device=frames.device)
@@ -237,7 +245,9 @@ class EgoMuscleModel(nn.Module):
         target = muscle[:, t_split:] if muscle is not None else None
 
         layerwise_video_repr: dict[str, torch.Tensor] | None = None
-        if self.video_encoder is not None and frames is not None:
+        if video_features is not None:
+            video_repr = self.video_encoder.adapter(video_features) if self.video_encoder is not None else None
+        elif self.video_encoder is not None and frames is not None:
             if return_layerwise_video:
                 video_repr, layerwise_video_repr = self.video_encoder(frames, return_layerwise=True)
             else:

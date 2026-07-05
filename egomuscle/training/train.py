@@ -226,6 +226,7 @@ class EgoMuscleDataModule(pl.LightningDataModule):
                 muscle_noise_std=float(split_cfg.get("muscle_noise_std", 0.0)) if split == "train" else 0.0,
                 frame_cache_dir=optional_path(split_cfg.get("frame_cache_dir")),
                 full_cache_dir=optional_path(split_cfg.get("full_cache_dir")),
+                video_feature_cache_dir=optional_path(split_cfg.get("video_feature_cache_dir")),
                 write_frame_cache=bool(split_cfg.get("write_frame_cache", True)),
                 replacement_sampling=bool(split_cfg.get("replacement_sampling", False)),
                 virtual_size=split_cfg.get("virtual_size"),
@@ -294,6 +295,8 @@ class EgoMuscleLightningModule(pl.LightningModule):
             fast_memory=model_cfg.get("fast_memory"),
             pbit=model_cfg.get("pbit"),
             slow_adapter=model_cfg.get("slow_adapter"),
+            need_weights=model_cfg.get("need_weights", False),
+            gradient_checkpointing=model_cfg.get("gradient_checkpointing", False),
         )
         self.training_cfg = config["training"]
         self.register_buffer("_image_mean", IMAGE_MEAN.clone(), persistent=False)
@@ -356,6 +359,7 @@ class EgoMuscleLightningModule(pl.LightningModule):
             muscle=muscle,
             activity_ids=batch["activity_id"],
             mask_ratio=self.training_cfg.get("mask_ratio", 0.5),
+            video_features=batch.get("video_features"),
         )
         if outputs.pred is None or outputs.target is None:
             raise ValueError("Training and evaluation require muscle supervision.")
@@ -411,7 +415,7 @@ class EgoMuscleLightningModule(pl.LightningModule):
                 frames = (frames - self._image_mean) / self._image_std
             batch["frames"] = frames
 
-        for key in ("muscle", "activity_id"):
+        for key in ("muscle", "activity_id", "video_features"):
             value = batch.get(key)
             if torch.is_tensor(value):
                 batch[key] = value.to(device, non_blocking=non_blocking)
@@ -558,7 +562,7 @@ def main() -> None:
         apply_override(config, override)
 
     if hasattr(torch, "set_float32_matmul_precision"):
-        torch.set_float32_matmul_precision("high")
+        torch.set_float32_matmul_precision("medium")
 
     if config["data"].get("num_workers") is None:
         config["data"]["num_workers"] = min(8, os.cpu_count() or 1)

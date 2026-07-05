@@ -342,6 +342,7 @@ class EgoMuscleDataset(Dataset):
         frame_cache_dir: str | Path | None = None,
         write_frame_cache: bool = True,
         full_cache_dir: str | Path | None = None,
+        video_feature_cache_dir: str | Path | None = None,
         is_train: bool = False,
         replacement_sampling: bool = False,
         virtual_size: int | None = None,
@@ -364,6 +365,7 @@ class EgoMuscleDataset(Dataset):
         self.muscle_noise_std = float(muscle_noise_std)
         self.frame_cache_dir = Path(frame_cache_dir) if frame_cache_dir is not None else None
         self.full_cache_dir = Path(full_cache_dir) if full_cache_dir is not None else None
+        self.video_feature_cache_dir = Path(video_feature_cache_dir) if video_feature_cache_dir is not None else None
         self.write_frame_cache = write_frame_cache
         self.is_train = is_train
         self.replacement_sampling = bool(replacement_sampling)
@@ -380,7 +382,10 @@ class EgoMuscleDataset(Dataset):
             raise ValueError("virtual_size must be positive when provided.")
         if not 0.0 <= self.threat_correlation_fraction <= 1.0:
             raise ValueError("threat_correlation_fraction must be in [0, 1].")
-        print(f"Dataset initialized with {len(self.records)} samples. Probing metadata on 12 threads...")
+        if self.video_feature_cache_dir is not None:
+            print(f"Using video feature cache: {self.video_feature_cache_dir}")
+        else:
+            print(f"Dataset initialized with {len(self.records)} samples. Probing metadata on 12 threads...")
         frame_count_cache_path = self.frame_cache_dir / "frame_counts.json" if self.frame_cache_dir is not None else None
         frame_count_cache: dict[str, int] = {}
         if frame_count_cache_path is not None and frame_count_cache_path.exists():
@@ -486,10 +491,19 @@ class EgoMuscleDataset(Dataset):
         total_frames = record.frame_count or self.n_frames
         indices = _sample_indices(total_frames, self.n_frames, mode=self.temporal_sample_mode)
 
-        frames = self._load_frames(record, indices=indices)
-        if self.scramble_video:
-            permutation = torch.randperm(frames.shape[0])
-            frames = frames[permutation]
+        video_features: torch.Tensor | None = None
+        if self.video_feature_cache_dir is not None:
+            feature_path = self.video_feature_cache_dir / f"{record.video_path.stem}.npy"
+            if feature_path.exists():
+                video_features = torch.from_numpy(np.load(feature_path)).float()
+
+        if video_features is not None:
+            frames = None
+        else:
+            frames = self._load_frames(record, indices=indices)
+            if self.scramble_video:
+                permutation = torch.randperm(frames.shape[0])
+                frames = frames[permutation]
 
         muscle_tensor: torch.Tensor | None = None
         if record.muscle_path is not None:
@@ -532,6 +546,7 @@ class EgoMuscleDataset(Dataset):
         return {
             "frames": frames,
             "muscle": muscle_tensor,
+            "video_features": video_features,
             "activity": record.activity,
             "activity_id": -1 if record.activity_id is None else record.activity_id,
             "clip_id": record.video_path.stem,
@@ -541,12 +556,16 @@ class EgoMuscleDataset(Dataset):
 
 def collate_egomuscle(batch: Iterable[dict[str, Any]]) -> dict[str, Any]:
     items = list(batch)
-    frames = torch.stack([item["frames"] for item in items], dim=0)
+    frames_list = [item["frames"] for item in items]
+    frames = torch.stack(frames_list, dim=0) if frames_list[0] is not None else None
     muscles = [item["muscle"] for item in items]
     muscle_tensor = None if any(m is None for m in muscles) else torch.stack(muscles, dim=0)
+    video_features_list = [item["video_features"] for item in items]
+    video_features = torch.stack(video_features_list, dim=0) if video_features_list[0] is not None else None
     return {
         "frames": frames,
         "muscle": muscle_tensor,
+        "video_features": video_features,
         "activity": [item["activity"] for item in items],
         "activity_id": torch.tensor([item["activity_id"] for item in items], dtype=torch.long),
         "clip_id": [item["clip_id"] for item in items],

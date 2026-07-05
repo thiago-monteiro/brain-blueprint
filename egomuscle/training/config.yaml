@@ -2,7 +2,7 @@ seed: 0
 output_dir: checkpoints
 
 data:
-  batch_size: 32
+  batch_size: 64
   num_workers: 12
   prefetch_factor: 2
   pin_memory: true
@@ -15,6 +15,7 @@ data:
     muscle_dir: data/processed/train/muscles
     metadata_path: data/processed/train/metadata.json
     frame_cache_dir: data/processed/train/frames
+    video_feature_cache_dir: data/processed/train/video_features
     replacement_sampling: false
     virtual_size: null
     threat_correlation_fraction: 0.0
@@ -28,11 +29,13 @@ data:
     muscle_dir: data/processed/val/muscles
     metadata_path: data/processed/val/metadata.json
     frame_cache_dir: data/processed/val/frames
+    video_feature_cache_dir: data/processed/val/video_features
   test:
     clip_dir: data/processed/test/clips
     muscle_dir: data/processed/test/muscles
     metadata_path: data/processed/test/metadata.json
     frame_cache_dir: data/processed/test/frames
+    video_feature_cache_dir: data/processed/test/video_features
 
 model:
   video_model_name: MCG-NJU/videomae-base
@@ -51,6 +54,8 @@ model:
   pred_dropout: 0.1
   predictive_distribution: point
   video_latent_prediction: false
+  need_weights: false
+  gradient_checkpointing: true
   fast_memory:
     enabled: false
     type: gru_slots
@@ -85,8 +90,8 @@ training:
   grad_clip_norm: 1.0
   precision: 16-mixed
   compile: true
-  compile_mode: default
-  accumulate_grad_batches: 4
+  compile_mode: max-autotune
+  accumulate_grad_batches: 2
   mask_ratio: 0.5
   loss_name: current
   loss_mode: mse
