@@ -444,6 +444,29 @@ class EgoMuscleLightningModule(pl.LightningModule):
             region_name = path.stem
             self.log(f"val/rsa_{region_name}", score, prog_bar=False, on_step=False, on_epoch=True)
 
+        algonauts_dir = self.eval_cfg.get("algonauts2025_rdms_dir")
+        if algonauts_dir and self.validation_representations:
+            algonauts_path = Path(algonauts_dir)
+            target_prefixes = {"bourne01", "bourne02"}
+            target_networks = {"Visual", "DefaultMode"}
+            for rdm_path in sorted(algonauts_path.glob("*_group.npy")):
+                stem = rdm_path.stem.replace("_group", "")
+                parts = stem.split("_")
+                if len(parts) < 2:
+                    continue
+                movie = parts[0]
+                network = parts[1] if len(parts) >= 2 else ""
+                if not any(movie.startswith(p) for p in target_prefixes):
+                    continue
+                if network not in target_networks:
+                    continue
+                neural_rdm = np.load(rdm_path)
+                if neural_rdm.shape != model_rdm.shape:
+                    continue
+                score, _ = rsa_score(model_rdm, neural_rdm)
+                log_name = f"val/rsa_algonauts_{movie}_{network}"
+                self.log(log_name, score, prog_bar=False, on_step=False, on_epoch=True)
+
     def configure_optimizers(self) -> dict[str, Any]:
         weight_decay = float(self.training_cfg.get("weight_decay", 0.05))
         decay = []

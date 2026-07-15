@@ -124,6 +124,7 @@ logging:
 
 evaluation:
   neural_rdms_dir: egomuscle/eval/neural_rdms
+  algonauts2025_rdms_dir: egomuscle/eval/algonauts2025_rdms
   rsa_monitor_subset: 92
   memory_probe:
     gaps: [0, 2, 4, 8, 12]

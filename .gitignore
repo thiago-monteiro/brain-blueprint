@@ -22,3 +22,4 @@ downloads/
 BOLD5000_Stimuli.zip
 models/**/*.safetensors
 models/**/pytorch_model.bin
+egomuscle/eval/algonauts2025_rdms/
