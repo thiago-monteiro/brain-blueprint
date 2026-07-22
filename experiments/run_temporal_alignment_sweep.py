@@ -17,7 +17,6 @@ if str(ROOT) not in sys.path:
 
 from egomuscle.data.dataset import EgoMuscleDataset, collate_egomuscle
 from egomuscle.training.losses import total_loss
-from egomuscle.training.smfe_losses import smfe_total_loss
 from egomuscle.eval.twente_eval import load_lightning_module
 from egomuscle.training.train import apply_override, load_config
 from experiments.run_ablations_csv import ABLATIONS
@@ -65,7 +64,6 @@ def evaluate_offset(
     loader: DataLoader,
     *,
     loss_mode: str,
-    loss_name: str,
     loss_weights: dict[str, float] | None,
     device: torch.device,
 ) -> float:
@@ -79,10 +77,7 @@ def evaluate_offset(
             outputs = module.model(frames=frames, muscle=muscle, activity_ids=activity_ids, mask_ratio=0.5)
             if outputs.pred is None or outputs.target is None:
                 raise ValueError("Temporal alignment sweep requires muscle prediction outputs.")
-            if loss_name == "smfe":
-                loss, _ = smfe_total_loss(outputs, weights=loss_weights)
-            else:
-                loss, _ = total_loss(outputs.pred, outputs.target, outputs.fused, loss_mode=loss_mode, weights=loss_weights)
+            loss, _ = total_loss(outputs.pred, outputs.target, outputs.fused, loss_mode=loss_mode, weights=loss_weights)
             losses.append(float(loss.detach().cpu().item()))
     return float(np.mean(losses))
 
@@ -132,7 +127,6 @@ def main() -> None:
                 module,
                 loader,
                 loss_mode=model_config["training"].get("loss_mode", "mse"),
-                loss_name=model_config["training"].get("loss_name", "current"),
                 loss_weights=model_config["training"].get("loss_weights"),
                 device=device,
             )

@@ -22,7 +22,6 @@ from egomuscle.eval.rdm import compute_rdm
 from egomuscle.eval.rsa import rsa_score
 from egomuscle.model.egomuscle import EgoMuscleModel
 from egomuscle.training.losses import total_loss
-from egomuscle.training.smfe_losses import smfe_total_loss
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
@@ -364,19 +363,13 @@ class EgoMuscleLightningModule(pl.LightningModule):
         if outputs.pred is None or outputs.target is None:
             raise ValueError("Training and evaluation require muscle supervision.")
 
-        if self.training_cfg.get("loss_name", "current") == "smfe":
-            loss, loss_parts = smfe_total_loss(
-                outputs,
-                weights=self.training_cfg.get("loss_weights"),
-            )
-        else:
-            loss, loss_parts = total_loss(
-                outputs.pred,
-                outputs.target,
-                outputs.fused,
-                loss_mode=self.training_cfg.get("loss_mode", "mse"),
-                weights=self.training_cfg.get("loss_weights"),
-            )
+        loss, loss_parts = total_loss(
+            outputs.pred,
+            outputs.target,
+            outputs.fused,
+            loss_mode=self.training_cfg.get("loss_mode", "mse"),
+            weights=self.training_cfg.get("loss_weights"),
+        )
 
         self.log(
             f"{stage}/loss",

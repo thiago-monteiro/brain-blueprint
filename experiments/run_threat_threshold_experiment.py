@@ -54,7 +54,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--random-seeds", action="store_true", help="Replace --seeds with 30 random seeds")
     parser.add_argument("--checkpoint-pattern", default="checkpoints/threat_f{fraction}_s{seed}/*.ckpt")
     parser.add_argument("--human-threat-rdm", type=Path, default=None)
-    parser.add_argument("--eval-manifest", type=Path, default=None, help="CSV with image_path,class rows from build_bold5000_threat_rdm.py.")
+    parser.add_argument("--eval-manifest", type=Path, default=None, help="CSV with image_path,class rows.")
     parser.add_argument("--synthetic-human-rdm", action="store_true")
     parser.add_argument("--max-clips", type=int, default=96)
     parser.add_argument("--batch-size", type=int, default=8)

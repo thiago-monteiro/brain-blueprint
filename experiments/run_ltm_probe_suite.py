@@ -21,7 +21,6 @@ if str(ROOT) not in sys.path:
 from egomuscle.data.dataset import EgoMuscleDataset, collate_egomuscle
 from egomuscle.eval.twente_eval import load_lightning_module
 from egomuscle.model.adapters import AdapterLinear
-from egomuscle.training.smfe_losses import smfe_total_loss
 from egomuscle.training.train import apply_override, load_config
 
 
@@ -87,7 +86,6 @@ def freeze_except_adapters(module) -> list[torch.nn.Parameter]:
 def evaluate(module, loader: DataLoader, device: torch.device, *, max_batches: int | None) -> dict[str, float]:
     module.eval()
     mses: list[float] = []
-    losses: list[float] = []
     with torch.no_grad():
         for batch_idx, batch in enumerate(loader):
             if max_batches is not None and batch_idx >= max_batches:
@@ -101,12 +99,7 @@ def evaluate(module, loader: DataLoader, device: torch.device, *, max_batches: i
             if output.pred is None or output.target is None:
                 raise ValueError("LTM probe requires muscle predictions.")
             mses.append(float(F.mse_loss(output.pred, output.target).detach().cpu().item()))
-            if output.pred_mu is not None:
-                loss, _ = smfe_total_loss(output)
-                losses.append(float(loss.detach().cpu().item()))
     result = {"mse": float(np.mean(mses))}
-    if losses:
-        result["smfe_loss"] = float(np.mean(losses))
     return result
 
 
@@ -123,12 +116,9 @@ def train_adapter_batches(module, loader: DataLoader, device: torch.device, opti
                 activity_ids=batch["activity_id"].to(device),
                 mask_ratio=0.5,
             )
-            if output.pred_mu is not None:
-                loss, _ = smfe_total_loss(output)
-            else:
-                if output.pred is None or output.target is None:
-                    raise ValueError("LTM probe requires muscle predictions.")
-                loss = F.mse_loss(output.pred, output.target)
+            if output.pred is None or output.target is None:
+                raise ValueError("LTM probe requires muscle predictions.")
+            loss = F.mse_loss(output.pred, output.target)
             loss.backward()
             optimizer.step()
             losses.append(float(loss.detach().cpu().item()))

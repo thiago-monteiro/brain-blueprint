@@ -15,8 +15,7 @@ from typing import Any
 import numpy as np
 import torch
 from PIL import Image
-from scipy.io import loadmat
-from scipy.spatial.distance import pdist, squareform
+from scipy.spatial.distance import squareform
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -30,7 +29,6 @@ from experiments.layerwise_cache import (
     load_or_build,
     neural_rank_cache_path,
     stimuli_list_cache_path,
-    subject_rdms_cache_path,
 )
 from experiments.layerwise_stats import (
     fast_spearman_vec,
@@ -73,17 +71,6 @@ def rss_mb() -> float | None:
 def log_phase(message: str, *, log_memory: bool = True) -> None:
     suffix = f" rss_mb={rss_mb():.1f}" if log_memory and rss_mb() is not None else ""
     logger.info("%s%s", message, suffix)
-
-
-BOLD5000_ROI_NAME_MAP = {
-    "EarlyVis": "primary_visual",
-    "LOC": "inferotemporal",
-    "LO": "lateral_occipital",
-    "OPA": "occipital_place_area",
-    "PPA": "parahippocampal_place_area",
-    "RSC": "retrosplenial_cortex",
-    "RRSC": "retrosplenial_cortex",
-}
 
 
 class StaticImageDataset(Dataset):
@@ -131,11 +118,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--config", type=Path, default=Path("egomuscle/training/config.yaml"))
     parser.add_argument("--split", choices=("train", "val", "test"), default="val")
-    parser.add_argument("--stimuli-dir", type=Path, help="Directory containing benchmark stimuli (e.g., BOLD5000 images).")
+    parser.add_argument("--stimuli-dir", type=Path, help="Directory containing benchmark stimuli.")
     parser.add_argument("--stimuli-list", type=Path, help="Ordered text file of stimulus filenames; keeps model/neural ordering aligned.")
-    parser.add_argument("--neural-dir", type=Path, default=Path("egomuscle/eval/neural_rdms"))
+    parser.add_argument("--neural-dir", type=Path, default=Path("egomuscle/eval/algonauts2025_rdms"))
     parser.add_argument("--output", type=Path, default=Path("experiments/results/layerwise_hierarchy.json"))
-    parser.add_argument("--bold5000-mat-root", type=Path, default=Path("data/raw/bold5000/extracted/BOLD5000_GLMsingle_ROI_betas/mat"))
     parser.add_argument(
         "--n-permutations",
         type=int,
@@ -211,52 +197,6 @@ def compute_and_save_layer_rdm(layer_name: str, feature_path: Path, rdm_path: Pa
 
 def layerwise_feature_metadata_path(feature_dir: Path) -> Path:
     return feature_dir / "metadata.json"
-
-
-def load_mat_matrix(path: Path) -> np.ndarray:
-    payload = loadmat(path)
-    keys = [key for key in payload.keys() if not key.startswith("__")]
-    if len(keys) != 1:
-        raise ValueError(f"Expected one matrix in {path}, found {keys}")
-    return payload[keys[0]]
-
-
-def parse_bold5000_mat_name(path: Path) -> tuple[str, str] | None:
-    import re
-
-    match = re.match(r"CSI(?P<subject>\d+)_GLMbetas-[^_]+_allses_(?P<hemi>LH|RH)(?P<roi>[A-Za-z]+)\.mat$", path.name)
-    if not match:
-        return None
-    roi = BOLD5000_ROI_NAME_MAP.get(match.group("roi"))
-    if roi is None:
-        return None
-    return f"CSI{match.group('subject')}", roi
-
-
-def load_subject_rdms(mat_root: Path, target_n: int) -> dict[str, dict[str, np.ndarray]]:
-    grouped: dict[tuple[str, str], list[Path]] = {}
-    if not mat_root.is_dir():
-        return {}
-    for path in sorted(mat_root.glob("*.mat")):
-        parsed = parse_bold5000_mat_name(path)
-        if parsed is None:
-            continue
-        subject, roi = parsed
-        grouped.setdefault((roi, subject), []).append(path)
-
-    by_region: dict[str, dict[str, np.ndarray]] = {}
-    for (roi, subject), paths in grouped.items():
-        matrices = []
-        for path in paths:
-            matrix = load_mat_matrix(path)
-            if matrix.shape[0] == target_n:
-                matrices.append(standardize_features(matrix))
-        if not matrices:
-            continue
-        features = np.concatenate(matrices, axis=1)
-        rdm = squareform(pdist(features, metric="cosine")).astype(np.float32)
-        by_region.setdefault(roi, {})[subject] = rdm
-    return by_region
 
 
 def rdm_vec(rdm: np.ndarray) -> np.ndarray:
@@ -502,9 +442,7 @@ def run_layerwise_analysis(args: argparse.Namespace, shared: LayerwiseSharedCont
     if not neural_rdms:
         raise FileNotFoundError(
             "Layerwise hierarchy requires neural RDM .npy files under "
-            f"{args.neural_dir}. Build them from BOLD5000 ROI betas with "
-            "`python -m egomuscle.eval.prepare_bold5000_rdms --mat-root <BOLD5000_mat_dir> --output-dir "
-            f"{args.neural_dir}`."
+            f"{args.neural_dir}."
         )
 
     config = load_config(args.config)
@@ -690,15 +628,7 @@ def run_layerwise_analysis(args: argparse.Namespace, shared: LayerwiseSharedCont
         del model_rdm, model_vec
         gc.collect()
 
-    subject_cache = subject_rdms_cache_path(args.bold5000_mat_root, len(clip_ids))
-    log_phase(f"subject_rdms cache={subject_cache} exists={subject_cache.exists()}", log_memory=log_mem)
-    subject_rdms_by_region = load_or_build(
-        subject_cache,
-        lambda: load_subject_rdms(args.bold5000_mat_root, target_n=len(clip_ids)),
-    )
-    log_phase(f"subject_rdms loaded regions={len(subject_rdms_by_region)}", log_memory=log_mem)
-    noise_ceilings = {region: noise_ceiling(rdms) for region, rdms in subject_rdms_by_region.items()}
-    stat_regions = set(subject_rdms_by_region)
+    stat_regions = {task[1] for task in score_tasks}
     if args.max_stat_regions is not None:
         stat_regions = set(sorted(stat_regions)[: args.max_stat_regions])
     stat_tasks = [task for task in score_tasks if task[1] in stat_regions]
@@ -728,8 +658,8 @@ def run_layerwise_analysis(args: argparse.Namespace, shared: LayerwiseSharedCont
                     neural_vecs[region],
                     neural_ranks[region],
                     rho,
-                    subject_rdms_by_region.get(region, {}),
-                    noise_ceilings.get(region),
+                    {},
+                    None,
                     n_permutations=args.n_permutations,
                     n_bootstrap=args.n_bootstrap,
                     permutation_mode=args.permutation_mode,
@@ -773,9 +703,6 @@ def run_layerwise_analysis(args: argparse.Namespace, shared: LayerwiseSharedCont
             "rdm_workers": rdm_workers,
             "feature_cache_dir": str(feature_dir),
             "rdm_cache_dir": str(rdm_dir),
-            "bold5000_mat_root": str(args.bold5000_mat_root),
-            "noise_ceilings": noise_ceilings,
-            "subject_rdm_counts": {region: len(rows) for region, rows in subject_rdms_by_region.items()},
         },
     }
     if not best_by_region:
@@ -786,9 +713,7 @@ def run_layerwise_analysis(args: argparse.Namespace, shared: LayerwiseSharedCont
             "Layerwise RSA produced no region scores: every neural RDM shape mismatched the model RDM. "
             f"Model used n={n_model} stimuli (RDM {n_model}x{n_model}); neural '{example_region}' is "
             f"{n_neural}x{n_neural}. "
-            "For BOLD5000, build the list with experiments/build_bold5000_neural_order_stimuli_list.py "
-            "(5254 lines, presentation order), set STIMULI_DIR to Scene_Stimuli/Presented_Stimuli, and "
-            "STIMULI_LIST to that file. Do not use a plain directory glob: unique images are fewer than 5254."
+            "Use --stimuli-list to ensure model and neural shapes match."
         )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2))

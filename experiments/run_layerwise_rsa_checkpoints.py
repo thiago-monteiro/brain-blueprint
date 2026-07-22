@@ -23,13 +23,12 @@ logging.basicConfig(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run BOLD5000 layerwise RSA for multiple checkpoint groups.")
+    parser = argparse.ArgumentParser(description="Run layerwise RSA for multiple checkpoint groups.")
     parser.add_argument("--config", type=Path, default=Path("egomuscle/training/config.yaml"))
-    parser.add_argument("--output-root", type=Path, default=Path("experiments/results/layerwise_bold5000_all"))
-    parser.add_argument("--stimuli-dir", type=Path, default=Path("data/raw/bold5000/extracted/BOLD5000_Stimuli/Scene_Stimuli/Presented_Stimuli"))
-    parser.add_argument("--stimuli-list", type=Path, default=Path("experiments/results/bold5000_stimuli_list_neural_order.txt"))
-    parser.add_argument("--neural-dir", type=Path, default=Path("egomuscle/eval/neural_rdms"))
-    parser.add_argument("--bold5000-mat-root", type=Path, default=Path("data/raw/bold5000/extracted/BOLD5000_GLMsingle_ROI_betas/mat"))
+    parser.add_argument("--output-root", type=Path, default=Path("experiments/results/layerwise_all"))
+    parser.add_argument("--stimuli-dir", type=Path, default=None)
+    parser.add_argument("--stimuli-list", type=Path, default=None)
+    parser.add_argument("--neural-dir", type=Path, default=Path("egomuscle/eval/algonauts2025_rdms"))
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--n-permutations", type=int, default=30)
@@ -155,7 +154,6 @@ def hierarchy_args_for_checkpoint(runner: argparse.Namespace, checkpoint: Path, 
         stimuli_list=runner.stimuli_list,
         neural_dir=runner.neural_dir,
         output=output,
-        bold5000_mat_root=runner.bold5000_mat_root,
         n_permutations=runner.n_permutations,
         permutation_mode=runner.permutation_mode,
         n_bootstrap=runner.n_bootstrap,
@@ -202,8 +200,6 @@ def build_subprocess_cmd(
         str(runner.stimuli_list),
         "--neural-dir",
         str(runner.neural_dir),
-        "--bold5000-mat-root",
-        str(runner.bold5000_mat_root),
         "--output",
         str(output),
         "--batch-size",

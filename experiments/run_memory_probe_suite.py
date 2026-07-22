@@ -23,12 +23,11 @@ if str(ROOT) not in sys.path:
 
 from egomuscle.data.dataset import EgoMuscleDataset, collate_egomuscle
 from egomuscle.eval.twente_eval import load_lightning_module
-from egomuscle.training.smfe_losses import gaussian_nll, uncertainty_error_correlation
 from egomuscle.training.train import apply_override, load_config
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run gap-retention and uncertainty probes for SMFE checkpoints.")
+    parser = argparse.ArgumentParser(description="Run gap-retention and uncertainty probes for checkpoints.")
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--config", type=Path, default=Path("egomuscle/training/config.yaml"))
     parser.add_argument("--dataset-root", type=Path, default=Path("data/processed"))
@@ -123,8 +122,6 @@ def evaluate_gap(
     max_batches: int | None,
 ) -> dict[str, float]:
     mses: list[float] = []
-    nlls: list[float] = []
-    corrs: list[float] = []
     module.eval()
     with torch.no_grad():
         for batch_idx, batch in enumerate(loader):
@@ -145,14 +142,7 @@ def evaluate_gap(
             if outputs.pred is None or outputs.target is None:
                 raise ValueError("Memory probe requires muscle predictions.")
             mses.append(float(F.mse_loss(outputs.pred, outputs.target).detach().cpu().item()))
-            if outputs.pred_mu is not None and outputs.pred_log_var is not None:
-                nlls.append(float(gaussian_nll(outputs.pred_mu, outputs.pred_log_var, outputs.target).detach().cpu().item()))
-                corrs.append(float(uncertainty_error_correlation(outputs.pred_mu, outputs.pred_log_var, outputs.target).detach().cpu().item()))
     row = {"gap": float(gap), "mse": float(np.mean(mses))}
-    if nlls:
-        row["nll"] = float(np.mean(nlls))
-    if corrs:
-        row["uncertainty_error_corr"] = float(np.mean(corrs))
     return row
 
 

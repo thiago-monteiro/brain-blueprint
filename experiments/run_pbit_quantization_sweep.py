@@ -19,7 +19,6 @@ if str(ROOT) not in sys.path:
 from egomuscle.data.dataset import EgoMuscleDataset, collate_egomuscle
 from egomuscle.eval.twente_eval import load_lightning_module
 from egomuscle.model.adapters import AdapterLinear
-from egomuscle.training.smfe_losses import gaussian_nll, uncertainty_error_correlation
 from egomuscle.training.train import apply_override, load_config
 
 
@@ -90,8 +89,6 @@ def summarize_stochastic_predictions(predictions: list[torch.Tensor]) -> tuple[t
 
 def evaluate(module, loader: DataLoader, device: torch.device, *, samples: int, max_batches: int | None) -> dict[str, float]:
     mses: list[float] = []
-    nlls: list[float] = []
-    uncertainty_corrs: list[float] = []
     ensemble_corrs: list[float] = []
     entropy_values: list[float] = []
     module.eval()
@@ -122,18 +119,9 @@ def evaluate(module, loader: DataLoader, device: torch.device, *, samples: int, 
                 denom = centered_var.norm() * centered_err.norm()
                 if float(denom.detach().cpu()) > 0:
                     ensemble_corrs.append(float((centered_var @ centered_err / denom).detach().cpu().item()))
-            if first_output.pred_mu is not None and first_output.pred_log_var is not None:
-                nlls.append(float(gaussian_nll(first_output.pred_mu, first_output.pred_log_var, target).detach().cpu().item()))
-                uncertainty_corrs.append(
-                    float(uncertainty_error_correlation(first_output.pred_mu, first_output.pred_log_var, target).detach().cpu().item())
-                )
             if first_output.pbit_entropy is not None:
                 entropy_values.append(float(first_output.pbit_entropy.mean().detach().cpu().item()))
     result = {"mse": float(np.mean(mses))}
-    if nlls:
-        result["nll"] = float(np.mean(nlls))
-    if uncertainty_corrs:
-        result["predicted_variance_error_corr"] = float(np.mean(uncertainty_corrs))
     if ensemble_corrs:
         result["ensemble_variance_error_corr"] = float(np.mean(ensemble_corrs))
     if entropy_values:

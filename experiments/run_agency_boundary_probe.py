@@ -18,7 +18,6 @@ if str(ROOT) not in sys.path:
 
 from egomuscle.data.dataset import EgoMuscleDataset, collate_egomuscle
 from egomuscle.eval.twente_eval import load_lightning_module
-from egomuscle.training.smfe_losses import gaussian_nll
 from egomuscle.training.train import apply_override, load_config
 
 
@@ -62,9 +61,6 @@ def prediction_metrics(output) -> dict[str, float]:
     if output.pred is None or output.target is None:
         raise ValueError("Agency probe requires muscle predictions.")
     metrics = {"mse": float(F.mse_loss(output.pred, output.target).detach().cpu().item())}
-    if output.pred_mu is not None and output.pred_log_var is not None:
-        metrics["nll"] = float(gaussian_nll(output.pred_mu, output.pred_log_var, output.target).detach().cpu().item())
-        metrics["predicted_variance"] = float(torch.exp(output.pred_log_var).mean().detach().cpu().item())
     if output.fast_state is not None:
         metrics["fast_state_norm"] = float(output.fast_state.norm(dim=-1).mean().detach().cpu().item())
     if output.pbit_entropy is not None:

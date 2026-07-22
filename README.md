@@ -36,7 +36,7 @@ Download public helper assets with:
 bash scripts/downloaders/download_egomuscle_data.sh
 ```
 
-This covers VideoMAE weights, MinT, and Twente. AMASS, BABEL, SMPL+H, and BOLD5000 stimuli require manual access from their official sources.
+This covers VideoMAE weights, MinT, and Twente. AMASS, BABEL, SMPL+H, and Algonauts 2025 require manual access from their official sources.
 
 ## Maintained commands
 
@@ -47,9 +47,9 @@ This covers VideoMAE weights, MinT, and Twente. AMASS, BABEL, SMPL+H, and BOLD50
 | Scaling sweep | `python experiments/run_scaling_sweep.py` |
 | Ablations | `python experiments/run_ablations_csv.py` |
 | BABEL recentered/raw view pair | `python experiments/build_babel_viewpair.py` |
-| SMFE train/eval suite | `python experiments/run_smfe_suite.py --mode train` or `--mode eval` |
 | PBIT quantization sweep | `python experiments/run_pbit_quantization_sweep.py` |
-| Layerwise neural RSA | `python experiments/run_layerwise_hierarchy.py` |
+| Algonauts 2025 RSA benchmark | `python experiments/run_algonauts2025_rsa.py --checkpoint <checkpoint>` |
+| Layerwise neural RSA | `python experiments/run_layerwise_hierarchy.py --checkpoint <checkpoint>` |
 | Viability-boundary RSA | `python experiments/run_viability_boundary_rsa.py` |
 
 Pass config overrides with dotted keys, for example:
@@ -141,46 +141,49 @@ python -m egomuscle.data.build_twente_dataset --view front
 
 Eval defaults to `data/processed_real/twente`.
 
-## BOLD5000 neural RSA
+## Algonauts 2025 neural RSA
 
-Expected local layout:
+Download the dataset with DataLad (or curl fallback):
+
+```bash
+bash scripts/downloaders/download_algonauts2025.sh
+```
+
+Expected layout after download:
 
 ```text
-data/raw/bold5000/extracted/BOLD5000_GLMsingle_ROI_betas/mat/
-data/raw/bold5000/extracted/BOLD5000_Stimuli/Scene_Stimuli/Presented_Stimuli/
-data/raw/bold5000/extracted/BOLD5000_Stimuli/Stimuli_Presentation_Lists/
+data/raw/algonauts2025/
+├── fmri/                           # Subject-level .h5 files
+└── stimuli/movies/                 # Movie10 MKV files
 ```
 
-Download ROI betas:
+Build neural RDMs from fMRI:
 
 ```bash
-bash scripts/downloaders/download_bold5000_roi_betas.sh
-unzip data/raw/bold5000/BOLD5000_GLMsingle_ROI_betas.zip -d data/raw/bold5000/extracted
+python -m egomuscle.eval.prepare_algonauts2025_rdms \
+  --fmri-root data/raw/algonauts2025/fmri \
+  --output-dir egomuscle/eval/algonauts2025_rdms
 ```
 
-Build neural RDMs:
+Build the clip manifest (TR-to-frame mapping):
 
 ```bash
-python -m egomuscle.eval.prepare_bold5000_rdms \
-  --mat-root data/raw/bold5000/extracted/BOLD5000_GLMsingle_ROI_betas/mat \
-  --output-dir egomuscle/eval/neural_rdms
+python experiments/build_algonauts2025_clips.py \
+  --h5 data/raw/algonauts2025/fmri/sub-01/func/sub-01_task-movie10_space-MNI152NLin2009cAsym_atlas-Schaefer18_parcel-1000Par7Net_bold.h5 \
+  --stimuli-root data/raw/algonauts2025/stimuli/movies/movie10 \
+  --output experiments/results/algonauts2025_clip_manifest.jsonl
 ```
 
-Build the stimulus list in neural beta row order:
+Run the full RSA benchmark (feature extraction, RDMs, scoring, permutation tests):
 
 ```bash
-python experiments/build_bold5000_neural_order_stimuli_list.py \
-  --output experiments/results/bold5000_stimuli_list_neural_order.txt
-```
-
-Run layerwise RSA:
-
-```bash
-python experiments/run_layerwise_hierarchy.py \
+python experiments/run_algonauts2025_rsa.py \
   --checkpoint <checkpoint.ckpt> \
-  --config egomuscle/training/config.yaml \
-  --neural-dir egomuscle/eval/neural_rdms \
-  --stimuli-dir data/raw/bold5000/extracted/BOLD5000_Stimuli/Scene_Stimuli/Presented_Stimuli \
-  --stimuli-list experiments/results/bold5000_stimuli_list_neural_order.txt \
-  --output experiments/results/layerwise_hierarchy.json
+  --manifest experiments/results/algonauts2025_clip_manifest.jsonl \
+  --stimuli-root data/raw/algonauts2025/stimuli/movies/movie10 \
+  --neural-dir egomuscle/eval/algonauts2025_rdms \
+  --output-dir experiments/results/algonauts2025_rsa
 ```
+
+During training, the validation loop also monitors Algonauts RSA for `bourne01`/`bourne02` movies (Visual and DefaultMode networks) when `evaluation.algonauts2025_rdms_dir` is configured. See `egomuscle/training/config.yaml`.
+
